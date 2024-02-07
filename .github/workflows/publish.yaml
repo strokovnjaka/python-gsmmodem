@@ -2,6 +2,7 @@
 # For more information see:
 #   - https://packaging.python.org/guides/publishing-package-distribution-releases-using-github-actions-ci-cd-workflows/
 #   - https://help.github.com/en/actions/language-and-framework-guides/using-python-with-github-actions#publishing-to-package-registries
+#   - https://docs.pypi.org/trusted-publishers/using-a-publisher/
 
 name: Upload Python Package
 
@@ -42,6 +43,8 @@ jobs:
     if: github.event_name == 'push'
     needs: [build]
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     steps:
       - name: Download dist files
         uses: actions/download-artifact@v2
@@ -52,8 +55,6 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository_url: https://test.pypi.org/legacy/
-          user: __token__
-          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
   publish:
     name: Publish to PyPI
     if: github.event_name == 'release'
@@ -67,6 +68,3 @@ jobs:
           path: dist/
       - name: Publish package to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          user: __token__
-          password: ${{ secrets.PYPI_API_TOKEN }}

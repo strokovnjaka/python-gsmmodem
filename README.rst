@@ -1,4 +1,4 @@
-python-gsmmodem-new
+python-gsmmodem-stk
 ===================
 *GSM modem module for Python*
 
@@ -44,32 +44,32 @@ Requirements
 How to install this package
 ---------------------------
 
-There are multiple ways to install ``python-gsmmodem-new`` package:
+There are multiple ways to install ``python-gsmmodem-stk`` package:
 
 Automatic installation of the latest "stable" release from PyPI
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ::
 
-    pip install python-gsmmodem-new
+    pip install python-gsmmodem-stk
 
 `pip <http://www.pip-installer.org>`_ will automatically download and install
 all dependencies, as required. You can also utilise ``easy_install`` in the
 same manner as using ``pip`` above.  
 
-If you are utilising ``python-gsmmodem-new`` as part of another project,
+If you are utilising ``python-gsmmodem-stk`` as part of another project,
 add it to your ``install_requires`` section of your ``setup.py`` file and
 upon your project's installation, it will be pulled in automatically.
 
 Manual installation of the latest "stable" release from PyPI
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Download a ``python-gsmmodem-new`` archive from `PyPI
-<https://pypi.python.org/pypi/python-gsmmodem-new>`_, extract it and install the package with command::
+Download a ``python-gsmmodem-stk`` archive from `PyPI
+<https://pypi.python.org/pypi/python-gsmmodem-stk>`_, extract it and install the package with command::
 
     python setup.py install
 
-Note that ``python-gsmmodem-new`` package relies on ``pySerial`` for serial communications: 
+Note that ``python-gsmmodem-stk`` package relies on ``pySerial`` for serial communications: 
 https://github.com/pyserial/pyserial
 
 Installation of the latest commit from GitHub
@@ -77,11 +77,11 @@ Installation of the latest commit from GitHub
 
 Clone from GitHub::
 
-    git clone https://github.com/babca/python-gsmmodem.git
+    git clone https://github.com/strokovnjaka/python-gsmmodem.git
     cd python-gsmmodem/
     python setup.py install
 
-Note that ``python-gsmmodem-new`` package relies on ``pySerial`` for serial communications: 
+Note that ``python-gsmmodem-stk`` package relies on ``pySerial`` for serial communications: 
 https://github.com/pyserial/pyserial
 
 Testing the package
@@ -114,7 +114,7 @@ Building documentation
 This package contains `Sphinx <http://sphinx-doc.org>`_-based documentation.
 To manually build or test the documentation locally, do the following::
 
-   git clone https://github.com/babca/python-gsmmodem.git
+   git clone https://github.com/strokovnjaka/python-gsmmodem.git
    cd python-gsmmodem
    pip install .[doc]
    cd doc

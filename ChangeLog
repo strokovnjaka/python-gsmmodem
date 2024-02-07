@@ -1,3 +1,8 @@
+* Wed Feb 9 2024 strokovnjaka - 0.14
+- stable release
+- fixed single-parameter-only CMGD command modems
+- using trusted publishers instead of token auth for PyPi
+
 * Wed Mar 15 2017 babca - 0.12
 – stable release
 - unit tests fixed after rapid merging – credits to: tomchy
