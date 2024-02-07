@@ -60,6 +60,8 @@ jobs:
     if: github.event_name == 'release'
     needs: [build]
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     steps:
       - name: Download dist files
         uses: actions/download-artifact@v2
