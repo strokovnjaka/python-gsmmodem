@@ -1165,8 +1165,13 @@ class GsmModem(SerialComms):
         if delete:
             if status == Sms.STATUS_ALL:
                 # Delete all messages
-                self.deleteMultipleStoredSms()
-            else:
+                try:
+                    # some modems don't support this
+                    self.deleteMultipleStoredSms()
+                    delete = False
+                except CommandError:
+                    ...
+            if delete:
                 for msgIndex in delMessages:
                     self.deleteStoredSms(msgIndex)
         return messages
@@ -1475,9 +1480,11 @@ class GsmModem(SerialComms):
         :raise CommandError: if unable to delete the stored message
         """
         self._setSmsMemory(readDelete=memory)
-        self.write('AT+CMGD={0},0'.format(index))
-        # TODO: make a check how many params are supported by the modem and use the right command. For example, Siemens MC35, TC35 take only one parameter.
-        #self.write('AT+CMGD={0}'.format(index))
+        try:
+            self.write('AT+CMGD={0},0'.format(index))
+        except CommandError:
+            # some modems do not support two paramsm e.g. Siemens MC35, TC35 take only one parameter.
+            self.write('AT+CMGD={0}'.format(index))
 
     def deleteMultipleStoredSms(self, delFlag=4, memory=None):
         """ Deletes all SMS messages that have the specified read status.
