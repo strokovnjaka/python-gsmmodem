@@ -189,7 +189,7 @@ class GsmModem(SerialComms):
         :raise PinRequiredError: if the SIM card requires a PIN but none was provided
         :raise IncorrectPinError: if the specified PIN is incorrect
         """
-        self.log.info('Connecting to modem on port %s at %dbps', self.port, self.baudrate)
+        self.log.info('Connecting to modem on port %s at %dbps', self._port, self._baudrate)
         super(GsmModem, self).connect()
 
         if waitingForModemToStartInSeconds > 0:
