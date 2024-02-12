@@ -9,12 +9,9 @@ import sys, time, unittest, logging, codecs
 from datetime import datetime
 from copy import copy
 
-from . import compat # For Python 2.6 compatibility
 from gsmmodem.exceptions import PinRequiredError, CommandError, InvalidStateException, TimeoutException,\
     CmsError, CmeError, EncodingError
 from gsmmodem.modem import StatusReport, Sms, ReceivedSms
-
-PYTHON_VERSION = sys.version_info[0]
 
 import gsmmodem.serial_comms
 import gsmmodem.modem
@@ -25,8 +22,7 @@ from . import fakemodems
 
 # Silence logging exceptions
 logging.raiseExceptions = False
-if sys.version_info[0] == 3 and sys.version_info[1] >= 1:
-    logging.getLogger('gsmmodem').addHandler(logging.NullHandler())
+logging.getLogger('gsmmodem').addHandler(logging.NullHandler())
 
 # The fake modem to use (if any)
 FAKE_MODEM = None
@@ -1479,9 +1475,8 @@ class TestSms(unittest.TestCase):
         for number, message, index, smsTime, smsc, pdu, sms_deliver_tpdu_length, ref, mem in self.tests:
             self.modem._smsRef = ref
             calcPdu = gsmmodem.pdu.encodeSmsSubmitPdu(number, message, ref)[0]
-            pduHex = codecs.encode(compat.str(calcPdu.data), 'hex_codec').upper()
-            if PYTHON_VERSION >= 3:
-                pduHex = str(pduHex, 'ascii')
+            pduHex = codecs.encode(calcPdu.data, 'hex_codec').upper()
+            pduHex = str(pduHex, 'ascii')
 
             def writeCallbackFunc(data):
                 def writeCallbackFuncReadCSCS(data):
@@ -1525,9 +1520,8 @@ class TestSms(unittest.TestCase):
         for number, message, index, smsTime, smsc, pdu, sms_deliver_tpdu_length, ref, mem in self.tests:
             self.modem._smsRef = ref
             calcPdu = gsmmodem.pdu.encodeSmsSubmitPdu(number, message, ref)[0]
-            pduHex = codecs.encode(compat.str(calcPdu.data), 'hex_codec').upper()
-            if PYTHON_VERSION >= 3:
-                pduHex = str(pduHex, 'ascii')
+            pduHex = codecs.encode(calcPdu.data, 'hex_codec').upper()
+            pduHex = str(pduHex, 'ascii')
 
             def writeCallbackFunc(data):
                 def writeCallbackFuncReadCSCS(data):

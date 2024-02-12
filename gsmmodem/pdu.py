@@ -9,20 +9,12 @@ from datetime import datetime, timedelta, tzinfo
 from copy import copy
 from .exceptions import EncodingError
 
-# For Python 3 support
-PYTHON_VERSION = sys.version_info[0]
-if PYTHON_VERSION >= 3:
-    MAX_INT = sys.maxsize
-    dictItemsIter = dict.items
-    xrange = range
-    unichr = chr
-    toByteArray = lambda x: bytearray(codecs.decode(x, 'hex_codec')) if type(x) == bytes else bytearray(codecs.decode(bytes(x, 'ascii'), 'hex_codec')) if type(x)  == str else x
-    rawStrToByteArray = lambda x: bytearray(bytes(x, 'latin-1'))
-else: #pragma: no cover
-    MAX_INT = sys.maxint
-    dictItemsIter = dict.iteritems
-    toByteArray = lambda x: bytearray(x.decode('hex')) if type(x) in (str, unicode) else x
-    rawStrToByteArray = bytearray
+MAX_INT = sys.maxsize
+dictItemsIter = dict.items
+xrange = range
+unichr = chr
+toByteArray = lambda x: bytearray(codecs.decode(x, 'hex_codec')) if type(x) == bytes else bytearray(codecs.decode(bytes(x, 'ascii'), 'hex_codec')) if type(x)  == str else x
+rawStrToByteArray = lambda x: bytearray(bytes(x, 'latin-1'))
 
 TEXT_MODE = ('\n\r !\"#%&\'()*+,-./0123456789:;<=>?ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz') # TODO: Check if all of them are supported inside text mode
 # Tables can be found at: http://en.wikipedia.org/wiki/GSM_03.38#GSM_7_bit_default_alphabet_and_extension_table_of_3GPP_TS_23.038_.2F_GSM_03.38
@@ -246,11 +238,7 @@ class Pdu(object):
         self.tpduLength = tpduLength
 
     def __str__(self):
-        global PYTHON_VERSION
-        if PYTHON_VERSION < 3:
-            return str(self.data).encode('hex').upper()
-        else: #pragma: no cover
-            return str(codecs.encode(self.data, 'hex_codec'), 'ascii').upper()
+        return str(self.data).encode('hex').upper()
 
 
 def encodeSmsSubmitPdu(number, text, reference=0, validity=None, smsc=None, requestStatusReport=True, rejectDuplicates=False, sendFlash=False):
@@ -272,10 +260,6 @@ def encodeSmsSubmitPdu(number, text, reference=0, validity=None, smsc=None, requ
     :return: A list of one or more tuples containing the SMS PDU (as a bytearray, and the length of the TPDU part
     :rtype: list of tuples
     """
-    if PYTHON_VERSION < 3:
-        if type(text) == str:
-            text = text.decode('UTF-8')
-
     tpduFirstOctet = 0x01 # SMS-SUBMIT PDU
     if validity != None:
         # Validity period format (TP-VPF) is stored in bits 4,3 of the first TPDU octet
@@ -699,10 +683,7 @@ def encodeTextMode(plaintext):
     :return: Passed string
     :rtype: str
     """
-    if PYTHON_VERSION >= 3:
-        plaintext = str(plaintext)
-    elif type(plaintext) == str:
-        plaintext = plaintext.decode('UTF-8')
+    plaintext = str(plaintext)
 
     for char in plaintext:
         idx = TEXT_MODE.find(char)
@@ -731,10 +712,7 @@ def encodeGsm7(plaintext, discardInvalid=False):
     :rtype: bytearray
     """
     result = bytearray()
-    if PYTHON_VERSION >= 3:
-        plaintext = str(plaintext)
-    elif type(plaintext) == str:
-        plaintext = plaintext.decode('UTF-8')
+    plaintext = str(plaintext)
 
     for char in plaintext:
         idx = GSM7_BASIC.find(char)
@@ -790,8 +768,7 @@ def divideTextGsm7(plainText):
     plainStopPtr  = 0
     chunkByteSize = 0
 
-    if PYTHON_VERSION >= 3:
-        plainText = str(plainText)
+    plainText = str(plainText)
     while plainStopPtr < len(plainText):
         char = plainText[plainStopPtr]
         idx = GSM7_BASIC.find(char)

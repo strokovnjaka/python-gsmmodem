@@ -28,28 +28,8 @@ def parseArgs():
     parser.add_argument('message', nargs='?', metavar='MESSAGE', help='message to send, defaults to stdin-prompt')
     return parser.parse_args()
 
-def parseArgsPy26():
-    """ Argument parser for Python 2.6 """
-    from gsmtermlib.posoptparse import PosOptionParser, Option
-    parser = PosOptionParser(description='Simple script for sending SMS messages')
-    parser.add_option('-i', '--port', metavar='PORT', help='port to which the GSM modem is connected; a number or a device name.')
-    parser.add_option('-b', '--baud', metavar='BAUDRATE', default=115200, help='set baud rate')
-    parser.add_option('-p', '--pin', metavar='PIN', default=None, help='SIM card PIN')
-    parser.add_option('-d', '--deliver', action='store_true', help='wait for SMS delivery report')
-    parser.add_option('-w', '--wait', type=int, default=0, help='Wait for modem to start, in seconds')
-    parser.add_option('--CNMI', default='', help='Set the CNMI of the modem, used for message notifications')
-    parser.add_positional_argument(Option('--destination', metavar='DESTINATION', help='destination mobile number'))
-    options, args = parser.parse_args()
-    if len(args) != 1:
-        parser.error('Incorrect number of arguments - please specify a DESTINATION to send to, e.g. {0} 012789456'.format(sys.argv[0]))
-    else:
-        options.destination = args[0]
-        options.message = None
-        options.lock_path = None
-        return options
-
 def main():
-    args = parseArgsPy26() if sys.version_info[0] == 2 and sys.version_info[1] < 7 else parseArgs()
+    args = parseArgs()
     if args.port == None:
         sys.stderr.write('Error: No port specified. Please specify the port to which the GSM modem is connected using the -i argument.\n')
         sys.exit(1)

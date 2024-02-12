@@ -4,10 +4,8 @@
 
 from __future__ import print_function
 
-import sys, time, unittest, logging
+import time, unittest, logging
 from copy import copy
-
-from . import compat # For Python 2.6 compatibility
 
 import gsmmodem.serial_comms
 from gsmmodem.exceptions import TimeoutException

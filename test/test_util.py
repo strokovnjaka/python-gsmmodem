@@ -7,8 +7,6 @@ from __future__ import print_function
 import sys, time, unittest, logging, re
 from datetime import timedelta
 
-from . import compat # For Python 2.6 compatibility
-
 from gsmmodem.util import allLinesMatchingPattern, lineMatching, lineStartingWith, lineMatchingPattern, SimpleOffsetTzInfo, removeAtPrefix
 
 class TestUtil(unittest.TestCase):

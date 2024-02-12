@@ -4,7 +4,6 @@
 
 import sys, unittest
 
-from . import compat # For Python 2.6 compatibility
 try:
     import gsmtermlib.trie
 except ImportError:

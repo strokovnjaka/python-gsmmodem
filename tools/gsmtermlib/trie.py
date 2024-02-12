@@ -1,16 +1,9 @@
 """ Pure Python trie implementation for strings """
 
-# Compensate for differences between Python 2 and 3
 import sys
-if sys.version_info[0] >= 3:
-    dictKeysIter = dict.keys
-    dictItemsIter = dict.items
-    dictValuesIter = dict.values
-else: #pragma: no cover
-    dictKeysIter = dict.iterkeys
-    dictItemsIter = dict.iteritems
-    dictValuesIter = dict.itervalues
-
+dictKeysIter = dict.keys
+dictItemsIter = dict.items
+dictValuesIter = dict.values
 
 class Trie(object):
 

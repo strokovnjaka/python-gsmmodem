@@ -11,21 +11,15 @@ from .exceptions import CommandError, InvalidStateException, CmeError, CmsError,
 from .pdu import encodeSmsSubmitPdu, decodeSmsPdu, encodeGsm7, encodeTextMode
 from .util import SimpleOffsetTzInfo, lineStartingWith, allLinesMatchingPattern, parseTextModeTimeStr, removeAtPrefix
 
-#from . import compat # For Python 2.6 compatibility
 from gsmmodem.util import lineMatching
 from gsmmodem.exceptions import EncodingError
-PYTHON_VERSION = sys.version_info[0]
 
 CTRLZ = '\x1a'
 TERMINATOR = '\r'
 
-if PYTHON_VERSION >= 3:
-    xrange = range
-    dictValuesIter = dict.values
-    dictItemsIter = dict.items
-else: #pragma: no cover
-    dictValuesIter = dict.itervalues
-    dictItemsIter = dict.iteritems
+xrange = range
+dictValuesIter = dict.values
+dictItemsIter = dict.items
 
 
 class Sms(object):
