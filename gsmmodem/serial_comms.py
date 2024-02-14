@@ -7,6 +7,7 @@ import re
 import asyncio
 # from serial_asyncio import open_serial_connection
 import serial_asyncio # https://github.com/pyserial/pyserial-asyncio
+import threading
 
 from .exceptions import TimeoutException
 
@@ -27,28 +28,32 @@ class SerialComms(asyncio.Protocol):
         :param fatalErrorCallbackFunc: function to call if a fatal error occurs in the serial device reading thread
         :type fatalErrorCallbackFunc: func
         """
+        # serial port
         self._port = port
+        # baud rate for communication
         self._baudrate = baudrate
 
-        # expected response terminator sequence
-        self._expectResponseTermSeq = None
-        # buffer containing response to a written command
-        self._response = None
-        # buffer containing lines from an unsolicited notification from the modem
-        self._notification = []
         # protocol's transport
         self._transport = None
+        # device's receive buffer
         self._rxBuffer = bytearray()
+        # expected response terminator sequence
+        self._expectResponseTermSeq = None
+        # buffer containing responses to a written command
+        self._response = None
+        # queue for getting requested responses out
         self._responseQueue = asyncio.Queue()
+        # buffer containing lines from an unsolicited notification from the modem
+        self._notification = []
 
-        self.notifyCallback = notifyCallbackFunc or self._placeholderCallback
-        self.fatalErrorCallback = fatalErrorCallbackFunc or self._placeholderCallback
+        # callback for non requested responses
+        self._notificationCallback = notifyCallbackFunc
+        # callback for fatal errors
+        self._fatalErrorCallback = fatalErrorCallbackFunc
 
-        self.com_args = args
-        self.com_kwargs = kwargs
-
-    def _placeholderCallback(self, *args, **kwargs):
-        """ Placeholder callback function (does nothing) """
+        # additional arguments for opening serial port
+        self._com_args = args
+        self._com_kwargs = kwargs
 
     def connection_made(self, transport):
         """ Called when connection is made 
@@ -64,8 +69,8 @@ class SerialComms(asyncio.Protocol):
         From asyncio.Protocol.
         """
         self.log.debug(f"Connection with {self._port} lost: {exc}")
-        if exc:
-            self.fatalErrorCallback(exc)
+        if exc and self._fatalErrorCallback:
+            self._loop.call_soon_threadsafe(self._fatalErrorCallback(exc))
 
     def pause_writing(self):
         """ Called when writing is paused
@@ -106,7 +111,8 @@ class SerialComms(asyncio.Protocol):
         if not self._rxBuffer and self._notification:
             # nothing else waiting for this notification
             self.log.debug('Notification: %s', self._notification)
-            self.notifyCallback(self._notification)
+            if self._notificationCallback:
+                self._loop.call_soon_threadsafe(self._notificationCallback(self._notification))
             self._notification = []
 
     def eof_received(self):
@@ -118,28 +124,35 @@ class SerialComms(asyncio.Protocol):
 
     def connect(self):
         """ Connects to the device and gets reader enqueued to execution """
-        loop = asyncio.get_event_loop()
-        coro = serial_asyncio.create_serial_connection(loop, self, self._port, 
+        self._loop = asyncio.get_event_loop()
+        threading.Thread(target=self._loop.run_forever)
+        coro = serial_asyncio.create_serial_connection(self._loop, self, self._port, 
                                                 baudrate=self._baudrate, 
-                                                *self.com_args,**self.com_kwargs)
-        asyncio.ensure_future(coro, loop=loop)
+                                                *self._com_args,**self._com_kwargs)
+        asyncio.run_coroutine_threadsafe(coro, self._loop)
 
-    def close(self):
+    async def close(self):
         """ Stops the protocol, closing the serial transport """
-        self._transport.close()
+        self._loop.call_soon_threadsafe(self._transport.close())
 
     async def write(self, data, waitForResponse=True, timeout=5, expectedResponseTermSeq=None):
+        future = asyncio.run_coroutine_threadsafe(self._write(data, waitForResponse, expectedResponseTermSeq))
+        try:
+            return future.result(timeout)
+        except TimeoutError:
+            self._loop.call_soon_threadsafe(self._clear_erts())
+            raise TimeoutException()
+
+    async def _clear_erts(self):
+        self._expectResponseTermSeq = None
+
+    async def _write(self, data, waitForResponse, expectedResponseTermSeq):
         if waitForResponse:
             if expectedResponseTermSeq:
                 self._expectResponseTermSeq = bytearray(expectedResponseTermSeq.encode())
             self._response = []
         self._transport.serial.write(data.encode())
         if waitForResponse:
-            try:
-                async with asyncio.timeout(timeout):
-                    response = await self._responseQueue.get()
-            except TimeoutError:
-                self._expectResponseTermSeq = None
-                raise TimeoutException()
+            response = await self._responseQueue.get()
             self._expectResponseTermSeq = None
             return response

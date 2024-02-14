@@ -153,7 +153,7 @@ class TestSerialException(unittest.TestCase):
         def errorCallback(ex):
             callbackCalled[0] = True
             self.assertIsInstance(ex, MockSerialPackage.SerialException)
-        self.serialComms.fatalErrorCallback = errorCallback
+        self.serialComms._fatalErrorCallback = errorCallback
         
         # Let the serial comms object attempt to read something
         self.serialComms.serial.responseSequence = ['12345\r\n']
