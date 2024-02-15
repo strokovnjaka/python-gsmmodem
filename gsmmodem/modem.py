@@ -2,6 +2,7 @@
 
 """ High-level API classes for an attached GSM modem """
 
+import copy
 import re
 import logging
 import weakref
@@ -159,10 +160,10 @@ class GsmModem(SerialComms):
         self.activeCalls = {}
         # Dict containing sent SMS messages (for auto-tracking their delivery status)
         self.sentSms = weakref.WeakValueDictionary()
-        self._ussdSessionEvent = None # threading.Event
+        self._ussdSessionEvent = None # asyncio.Event
         self._ussdResponse = None # gsmmodem.modem.Ussd
-        self._smsStatusReportEvent = None # threading.Event
-        self._dialEvent = None # threading.Event
+        self._smsStatusReportEvent = None # asyncio.Event
+        self._dialEvent = None # asyncio.Event
         self._dialResponse = None # gsmmodem.modem.Call
         self._waitForAtdResponse = True # Flag that controls if we should wait for an immediate response to ATD, or not
         self._waitForCallInitUpdate = True # Flag that controls if we should wait for a ATD "call initiated" message
@@ -228,27 +229,26 @@ class GsmModem(SerialComms):
             await self._unlockSim(pin)
 
         # Get list of supported commands from modem
-        commands = self.supportedCommands
-        self._commands = commands
+        await self.supportedCommands()
 
         # Device-specific settings
         callUpdateTableHint = 0 # unknown modem
         enableWind = False
-        if commands != None:
-            if '^CVOICE' in commands:
+        if self._commands:
+            if '^CVOICE' in self._commands:
                 await self.write('AT^CVOICE=0', parseError=False) # Enable voice calls
-            if '+VTS' in commands: # Check for DTMF sending support
+            if '+VTS' in self._commands: # Check for DTMF sending support
                 Call.dtmfSupport = True
-            elif '^DTMF' in commands:
+            elif '^DTMF' in self._commands:
                 # Huawei modems use ^DTMF to send DTMF tones
                 callUpdateTableHint = 1 # Huawei
-            if '^USSDMODE' in commands:
+            if '^USSDMODE' in self._commands:
                 # Enable Huawei text-mode USSD
                 await self.write('AT^USSDMODE=0', parseError=False)
-            if '+WIND' in commands:
+            if '+WIND' in self._commands:
                 callUpdateTableHint = 2 # Wavecom
                 enableWind = True
-            elif '+ZPAS' in commands:
+            elif '+ZPAS' in self._commands:
                 callUpdateTableHint = 3 # ZTE
         else:
             # Try to enable general notifications on Wavecom-like device
@@ -268,7 +268,8 @@ class GsmModem(SerialComms):
 
         # Attempt to identify modem type directly (if not already) - for outgoing call status updates
         if callUpdateTableHint == 0:
-            if 'simcom' in self.manufacturer.lower() : #simcom modems support DTMF and don't support AT+CLAC
+            manufacturer = (await self.manufacturer()).lower()
+            if 'simcom' in manufacturer: #simcom modems support DTMF and don't support AT+CLAC
                 Call.dtmfSupport = True
                 try:
                     await self.write('AT+DDET=1')                # enable detect incoming DTMF
@@ -276,7 +277,7 @@ class GsmModem(SerialComms):
                     # simcom 7000E for example doesn't support the DDET command
                     Call.dtmfSupport = False
 
-            if self.manufacturer.lower() == 'huawei':
+            if manufacturer == 'huawei':
                 callUpdateTableHint = 1 # huawei
             else:
                 # See if this is a ZTE modem that has not yet been identified based on supported commands
@@ -305,7 +306,7 @@ class GsmModem(SerialComms):
                                       (re.compile('^\+WIND: 6,(\d)$'), self._handleCallEnded))
             self._waitForAtdResponse = False # Wavecom modems return OK only when the call is answered
             self._mustPollCallStatus = False
-            if commands == None: # older modem, assume it has standard DTMF support
+            if not self._commands: # older modem, assume it has standard DTMF support
                 Call.dtmfSupport = True
         elif callUpdateTableHint == 3: # ZTE
             # Use ZTE notifications ("CONNECT"/"HANGUP", but no "call initiated" notification)
@@ -316,7 +317,7 @@ class GsmModem(SerialComms):
             self._waitForAtdResponse = False # ZTE modems do not return an immediate  OK only when the call is answered
             self._mustPollCallStatus = False
             self._waitForCallInitUpdate = False # ZTE modems do not provide "call initiated" updates
-            if commands == None: # ZTE uses standard +VTS for DTMF
+            if not self.commands: # ZTE uses standard +VTS for DTMF
                 Call.dtmfSupport = True
         else:
             # Unknown modem - we do not know what its call updates look like. Use polling instead
@@ -458,7 +459,7 @@ class GsmModem(SerialComms):
         self.log.debug('write: %s', data)
         responseLines = await super(GsmModem, self).write(data + writeTerm, waitForResponse=waitForResponse, timeout=timeout, expectedResponseTermSeq=expectedResponseTermSeq)
         if self._writeWait > 0: # Sleep a bit if required (some older modems suffer under load)
-            asyncio.sleep(self._writeWait)
+            await asyncio.sleep(self._writeWait)
         if waitForResponse:
             cmdStatusLine = responseLines[-1]
             if parseError:
@@ -473,7 +474,7 @@ class GsmModem(SerialComms):
                             self._writeWait += 0.2 # Increase waiting period temporarily
                             # Retry the command after waiting a bit
                             self.log.debug('Device/SIM busy error detected; self._writeWait adjusted to %fs', self._writeWait)
-                            asyncio.sleep(self._writeWait)
+                            await asyncio.sleep(self._writeWait)
                             result = await self.write(data, waitForResponse, timeout, parseError, writeTerm, expectedResponseTermSeq)
                             self.log.debug('self_writeWait set to 0.1 because of recovering from device busy (515) error')
                             if errorCode == 515:
@@ -537,6 +538,7 @@ class GsmModem(SerialComms):
 
     async def supportedCommands(self):
         """ :return: list of AT commands supported by this modem (without the AT prefix). Returns None if not known """
+        if self._commands: return copy.deepcopy(self._commands)
         try:
             # AT+CLAC responses differ between modems. Most respond with +CLAC: and then a comma-separated list of commands
             # while others simply return each command on a new line, with no +CLAC: prefix
@@ -545,12 +547,12 @@ class GsmModem(SerialComms):
                 commands = response[0]
                 if commands.startswith('+CLAC'):
                     commands = commands[6:] # remove the +CLAC: prefix before splitting
-                return commands.split(',')
+                self._commands = commands.split(',')
             elif len(response) > 2: # Multi-line response
-                return [removeAtPrefix(cmd.strip()) for cmd in response[:-1]]
+                self._commands = [removeAtPrefix(cmd.strip()) for cmd in response[:-1]]
             else:
                 self.log.debug('Unhandled +CLAC response: {0}'.format(response))
-                return None
+                self._commands = None
         except (TimeoutException, CommandError):
             # Try interactive command recognition
             commands = []
@@ -572,12 +574,8 @@ class GsmModem(SerialComms):
                     commands.append(command)
                 except:
                     continue
-
-            # Return found commands
-            if len(commands) == 0:
-                return None
-            else:
-                return commands
+            self._commands = commands if len(commands) > 0 else None
+        return copy.deepcopy(self._commands)
 
     async def smsTextMode(self):
         """ :return: True if the modem is set to use text mode for SMS, False if it is set to use PDU mode """
@@ -596,10 +594,7 @@ class GsmModem(SerialComms):
         :return: List of supported encoding names. """
 
         # Check if command is available
-        if self._commands == None:
-            self._commands = self.supportedCommands
-
-        if self._commands == None:
+        if not self._commands:
             self._smsSupportedEncodingNames = []
             return self._smsSupportedEncodingNames
 
@@ -632,13 +627,10 @@ class GsmModem(SerialComms):
 
         self._smsSupportedEncodingNames = enc_list
         return self._smsSupportedEncodingNames
-
+    
     async def smsEncoding(self):
         """ :return: Encoding name if encoding command is available, else GSM. """
-        if self._commands == None:
-            self._commands = self.supportedCommands
-
-        if self._commands == None:
+        if not self._commands:
             return self._smsEncoding
 
         if '+CSCS' in self._commands:
@@ -664,10 +656,7 @@ class GsmModem(SerialComms):
         :raise ValueError: if encoding is not supported by modem
         """
         # Check if command is available
-        if self._commands == None:
-            self._commands = self.supportedCommands
-
-        if self._commands == None:
+        if not self._commands:
             if encoding != self._smsEncoding:
                 raise CommandError('Unable to set SMS encoding (no supported commands)')
             else:
@@ -768,7 +757,7 @@ class GsmModem(SerialComms):
         """
 
         try:
-            if "+CNUM" in self._commands:
+            if self._commands and "+CNUM" in self._commands:
                 response = await self.write('AT+CNUM')
             else:
                 # temporarily switch to "own numbers" phonebook, read position 1 and than switch back
@@ -842,10 +831,10 @@ class GsmModem(SerialComms):
                     checkCreg = False
             else:
                 # Check signal strength
-                ss = self.signalStrength
+                ss = await self.signalStrength()
                 if ss > 0:
                     return ss
-            asyncio.sleep(1)
+            await asyncio.sleep(1)
         # Only timeout gets here
         raise TimeoutException()
 
@@ -897,7 +886,8 @@ class GsmModem(SerialComms):
             # Send SMS PDUs via AT commands
             for pdu in pdus:
                 await self.write('AT+CMGS={0}'.format(pdu.tpduLength), timeout=5, expectedResponseTermSeq='> ')
-                result = lineStartingWith('+CMGS:', await self.write(str(pdu), timeout=35, writeTerm=CTRLZ)) # example: +CMGS: xx
+                # example: +CMGS: xx
+                result = lineStartingWith('+CMGS:', await self.write(str(pdu), timeout=35, writeTerm=CTRLZ))
 
         if result == None:
             raise CommandError('Modem did not respond with +CMGS response')
@@ -911,14 +901,15 @@ class GsmModem(SerialComms):
         # Create sent SMS object for future delivery checks
         sms = SentSms(destination, text, reference)
 
-        # TODO: cast _smsStatusReportEvent to asyncio
         # Add a weak-referenced entry for this SMS (allows us to update the SMS state if a status report is received)
         self.sentSms[reference] = sms
         if waitForDeliveryReport:
-            self._smsStatusReportEvent = threading.Event()
-            if self._smsStatusReportEvent.wait(deliveryTimeout):
+            self._smsStatusReportEvent = asyncio.Event()
+            future = self._smsStatusReportEvent.wait()
+            try:
+                future.result(deliveryTimeout)
                 self._smsStatusReportEvent = None
-            else: # Response timed out
+            except TimeoutError:
                 self._smsStatusReportEvent = None
                 raise TimeoutException()
         return sms
@@ -935,25 +926,26 @@ class GsmModem(SerialComms):
         :return: The USSD response message/session (as a Ussd object)
         :rtype: gsmmodem.modem.Ussd
         """
-        # TODO: cast _ussdSessionEvent to asyncio
-        self._ussdSessionEvent = threading.Event()
+        self._ussdSessionEvent = asyncio.Event()
         try:
             cusdResponse = await self.write('AT+CUSD=1,"{0}",15'.format(ussdString), timeout=responseTimeout) # Should respond with "OK"
         except Exception:
-            self._ussdSessionEvent = None # Cancel the thread sync lock
+            self._ussdSessionEvent = None
             raise
 
         # Some modems issue the +CUSD response before the acknowledgment "OK" - check for that
         if len(cusdResponse) > 1:
             cusdResponseFound = lineStartingWith('+CUSD', cusdResponse) != None
             if cusdResponseFound:
-                self._ussdSessionEvent = None # Cancel thread sync lock
+                self._ussdSessionEvent = None
                 return self._parseCusdResponse(cusdResponse)
         # Wait for the +CUSD notification message
-        if self._ussdSessionEvent.wait(responseTimeout):
+        future = self._ussdSessionEvent.wait()
+        try:
+            future.result(responseTimeout)
             self._ussdSessionEvent = None
             return self._ussdResponse
-        else: # Response timed out
+        except TimeoutError:
             self._ussdSessionEvent = None
             raise TimeoutException()
 
@@ -994,14 +986,13 @@ class GsmModem(SerialComms):
         :return: The outgoing call
         :rtype: gsmmodem.modem.Call
         """
-        # TODO: cast _dialEvent to asyncio
         if self._waitForCallInitUpdate:
             # Wait for the "call originated" notification message
-            self._dialEvent = threading.Event()
+            self._dialEvent = asyncio.Event()
             try:
                 await self.write('ATD{0};'.format(number), timeout=timeout, waitForResponse=self._waitForAtdResponse)
             except Exception:
-                self._dialEvent = None # Cancel the thread sync lock
+                self._dialEvent = None
                 raise
         else:
             # Don't wait for a call init update - base the call ID on the number of active calls
@@ -1013,21 +1004,21 @@ class GsmModem(SerialComms):
             self.activeCalls[callId] = call
             return call
 
-        # TODO: cast _pollCallStatus to asyncio
         if self._mustPollCallStatus:
-            # # Fake a call notification by polling call status until the status indicates that the call is being dialed
-            # threading.Thread(target=self._pollCallStatus, kwargs={'expectedState': 0, 'timeout': timeout}).start()
-            # TODO: cast the above to the below; is this ok?
-            asyncio.get_event_loop().r
-            self._pollCallStatus(expectedState=0, timeout=timeout)
+            # Fake a call notification by polling call status until the status indicates that the call is being dialed
+            asyncio.create_task(
+                self._pollCallStatus(expectedState=0, timeout=timeout)
+            )
 
-        if self._dialEvent.wait(timeout):
+        future = self._dialEvent.wait()
+        try:
+            future.result(timeout)
             self._dialEvent = None
             callId, callType = self._dialResponse
             call = Call(self, callId, callType, number, callStatusUpdateCallbackFunc)
             self.activeCalls[callId] = call
             return call
-        else: # Call establishing timed out
+        except TimeoutError:
             self._dialEvent = None
             raise TimeoutException()
 
@@ -1146,20 +1137,8 @@ class GsmModem(SerialComms):
                     await self.deleteStoredSms(msgIndex)
         return messages
 
-    # TODO: to asyncio
-    def _handleModemNotification(self, lines):
+    async def _handleModemNotification(self, lines):
         """ Handler for unsolicited notifications from the modem
-
-        This method simply spawns a separate thread to handle the actual notification
-        (in order to release the read thread so that the handlers are able to write back to the modem, etc)
-
-        :param lines The lines that were read
-        """
-        threading.Thread(target=self.__threadedHandleModemNotification, kwargs={'lines': lines}).start()
-
-    # TODO: to asyncio
-    async def __threadedHandleModemNotification(self, lines):
-        """ Implementation of _handleModemNotification() to be run in a separate thread
 
         :param lines The lines that were read
         """
@@ -1200,7 +1179,6 @@ class GsmModem(SerialComms):
         # If this is reached, the notification wasn't handled
         self.log.debug('Unhandled unsolicited modem notification: %s', lines)
 
-    # TODO: to asyncio
     #Simcom modem able detect incoming DTMF
     async def _handleIncomingDTMF(self,line):
         self.log.debug('Handling incoming DTMF')
@@ -1217,7 +1195,6 @@ class GsmModem(SerialComms):
         else:
             return self.dtmfpool.pop(0)
 
-    # TODO: to asyncio
     async def _handleIncomingCall(self, lines):
         self.log.debug('Handling incoming call')
         ringLine = lines.pop(0)
@@ -1347,7 +1324,7 @@ class GsmModem(SerialComms):
             if report.reference in self.sentSms:
                 self.sentSms[report.reference].report = report
             if self._smsStatusReportEvent:
-                # A sendSms() call is waiting for this response - notify waiting thread
+                # A sendSms() call is waiting for this response
                 self._smsStatusReportEvent.set()
             else:
                 # Nothing is waiting for this report directly - use callback
@@ -1372,7 +1349,7 @@ class GsmModem(SerialComms):
         if report.reference in self.sentSms:
             self.sentSms[report.reference].report = report
         if self._smsStatusReportEvent:
-            # A sendSms() call is waiting for this response - notify waiting thread
+            # A sendSms() call is waiting for this response
             self._smsStatusReportEvent.set()
         else:
             # Nothing is waiting for this report directly - use callback
@@ -1483,7 +1460,7 @@ class GsmModem(SerialComms):
         if self._ussdSessionEvent:
             # A sendUssd() call is waiting for this response - parse it
             self._ussdResponse = self._parseCusdResponse(lines)
-            # Notify waiting thread
+            # Notify the issuing command
             self._ussdSessionEvent.set()
 
     def _parseCusdResponse(self, lines):
@@ -1533,14 +1510,14 @@ class GsmModem(SerialComms):
         :raise TimeoutException: If a timeout was specified, and has occurred
         """
         callDone = False
-        timeLeft = timeout or 999999
-        while self.alive and not callDone and timeLeft > 0:
-            asyncio.sleep(0.5)
-            if expectedState == 0: # Only call initializing can timeout
-                timeLeft -= 0.5
+        timeout = timeout or 999999
+        while not callDone and timeout > 0:
+            await asyncio.sleep(0.5)
+            if expectedState == 0: # Only initiated call can timeout
+                timeout -= 0.5
             try:
                 clcc = self._pollCallStatusRegex.match((await self.write('AT+CLCC'))[0])
-            except TimeoutException as timeout:
+            except TimeoutException:
                 # Can happen if the call was ended during our asyncio.sleep() call
                 clcc = None
             if clcc:
@@ -1567,7 +1544,7 @@ class GsmModem(SerialComms):
                 # Call was rejected
                 callDone = True
                 await self._handleCallRejected(None, callId=callId)
-        if timeLeft <= 0:
+        if timeout <= 0:
             raise TimeoutException()
 
 
