@@ -4,6 +4,8 @@
 
 BRANCH: mms
 
+THIS HAS NOT BEEN CHANGED TO asyncio!
+
 PLEASE NOTE: *Everything* in this file (PdpContext, GprsModem class, etc) is experimental.
 This is NOT meant to be used in production in any way; the API is completely unstable,
 no unit tests will be written for this in the forseeable future, and stuff may generally

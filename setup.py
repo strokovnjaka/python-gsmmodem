@@ -9,7 +9,7 @@ from setuptools import setup
 test_command = [sys.executable, '-m', 'unittest', 'discover']
 coverage_command = ['coverage', 'run', '-m', 'unittest', 'discover']
 
-VERSION = "0.12"
+VERSION = "0.2"
 
 class RunUnitTests(Command):
     """ run unit tests """

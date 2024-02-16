@@ -38,7 +38,7 @@ Requirements
 ------------
 
 - Python 3.3 or later
-- pySerial
+- `pyserial-asyncio <https://github.com/pyserial/pyserial-asyncio>`
 
 
 How to install this package

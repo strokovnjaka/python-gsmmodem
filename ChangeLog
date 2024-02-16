@@ -1,3 +1,7 @@
+* coming soon 2024 strokovnjaka - 0.2
+- stable release
+- using asyncio of async calls
+
 * Wed Feb 9 2024 strokovnjaka - 0.14
 - stable release
 - fixed single-parameter-only CMGD command modems

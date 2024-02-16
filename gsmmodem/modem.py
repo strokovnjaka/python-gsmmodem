@@ -60,13 +60,13 @@ class ReceivedSms(Sms):
         self.udh = udh
         self.index = index
 
-    def reply(self, message):
-        """ Convenience method that sends a reply SMS to the sender of this message """
-        return self._gsmModem.sendSms(self.number, message)
+    # async def reply(self, message):
+    #     """ Convenience method that sends a reply SMS to the sender of this message """
+    #     return await self._gsmModem.sendSms(self.number, message)
 
-    def sendSms(self, dnumber, message):
-        """ Convenience method that sends a SMS to someone else """
-        return self._gsmModem.sendSms(dnumber, message)
+    # async def sendSms(self, dnumber, message):
+    #     """ Convenience method that sends a SMS to someone else """
+    #     return await self._gsmModem.sendSms(dnumber, message)
 
     def getModem(self):
         """ Convenience method that returns the gsm modem instance """
@@ -330,13 +330,13 @@ class GsmModem(SerialComms):
         await self.write('AT+COPS=3,0', parseError=False) # Use long alphanumeric name format
 
         # SMS setup
-        await self.write('AT+CMGF={0}'.format(1 if self.smsTextMode else 0)) # Switch to text or PDU mode for SMS messages
+        await self.write('AT+CMGF={0}'.format(1 if self._smsTextMode else 0)) # Switch to text or PDU mode for SMS messages
         self._compileSmsRegexes()
         if self._smscNumber != None:
             await self.write('AT+CSCA="{0}"'.format(self._smscNumber)) # Set default SMSC number
             currentSmscNumber = self._smscNumber
         else:
-            currentSmscNumber = self.smsc
+            currentSmscNumber = await self.smsc()
         # Some modems delete the SMSC number when setting text-mode SMS parameters; preserve it if needed
         if currentSmscNumber != None:
             self._smscNumber = None # clear cache
@@ -345,8 +345,8 @@ class GsmModem(SerialComms):
         else:
             await self.write('AT+CSMP=17,167,0,0', parseError=False) # Not enable delivery reports
         # ...check SMSC again to ensure it did not change
-        if currentSmscNumber != None and self.smsc != currentSmscNumber:
-            self.smsc = currentSmscNumber
+        if currentSmscNumber != None and (await self.smsc()) != currentSmscNumber:
+            await self.smsc(currentSmscNumber)
 
         # Set message storage, but first check what the modem supports - example response: +CPMS: (("SM","BM","SR"),("SM"))
         try:
@@ -670,7 +670,7 @@ class GsmModem(SerialComms):
 
         # Check if command is available
         if self._smsSupportedEncodingNames == None:
-            self.smsSupportedEncoding
+            await self.smsSupportedEncoding()
 
         # Check if desired encoding is available
         if encoding in self._smsSupportedEncodingNames:
@@ -700,7 +700,7 @@ class GsmModem(SerialComms):
 
     def _compileSmsRegexes(self):
         """ Compiles regular expression used for parsing SMS messages based on current mode """
-        if self.smsTextMode:
+        if self._smsTextMode:
             if self.CMGR_SM_DELIVER_REGEX_TEXT == None:
                 self.CMGR_SM_DELIVER_REGEX_TEXT = re.compile('^\+CMGR: "([^"]+)","([^"]+)",[^,]*,"([^"]+)"$')
                 self.CMGR_SM_REPORT_REGEXT_TEXT = re.compile('^\+CMGR: ([^,]*),\d+,(\d+),"{0,1}([^"]*)"{0,1},\d*,"([^"]+)","([^"]+)",(\d+)$')
@@ -787,7 +787,7 @@ class GsmModem(SerialComms):
         except (TimeoutException, CommandError):
             raise
 
-    async def ownNumber(self, phone_number):
+    async def setOwnNumber(self, phone_number):
         actual_phonebook = await self.write('AT+CPBS?')
         if actual_phonebook is not "ON":
             await self.write('AT+CPBS="ON"')
@@ -855,13 +855,13 @@ class GsmModem(SerialComms):
         """
 
         # Check input text to select appropriate mode (text or PDU)
-        if self.smsTextMode:
+        if self._smsTextMode:
             try:
                 encodedText = encodeTextMode(text)
             except ValueError:
-                self.smsTextMode = False
+                self._smsTextMode = False
 
-        if self.smsTextMode:
+        if self._smsTextMode:
             # Send SMS via AT commands
             await self.write('AT+CMGS="{0}"'.format(destination), timeout=5, expectedResponseTermSeq='> ')
             result = lineStartingWith('+CMGS:', await self.write(text, timeout=35, writeTerm=CTRLZ))
@@ -876,9 +876,9 @@ class GsmModem(SerialComms):
             # Encode message text and set data coding scheme based on text contents
             if encodedText == None:
                 # Cannot encode text using GSM-7; use UCS2 instead
-                self.smsEncoding = 'UCS2'
+                await self.smsEncoding('UCS2')
             else:
-                self.smsEncoding = 'GSM'
+                await self.smsEncoding('GSM')
 
             # Encode text into PDUs
             pdus = encodeSmsSubmitPdu(destination, text, reference=self._smsRef, sendFlash=sendFlash)
@@ -1063,7 +1063,7 @@ class GsmModem(SerialComms):
         await self._setSmsMemory(readDelete=memory)
         messages = []
         delMessages = set()
-        if self.smsTextMode:
+        if self._smsTextMode:
             cmglRegex= re.compile('^\+CMGL: (\d+),"([^"]+)","([^"]+)",[^,]*,"([^"]+)"$')
             for key, val in dictItemsIter(Sms.TEXT_MODE_STATUS_MAP):
                 if status == val:
@@ -1375,7 +1375,7 @@ class GsmModem(SerialComms):
         await self._setSmsMemory(readDelete=memory)
         msgData = await self.write('AT+CMGR={0}'.format(index))
         # Parse meta information
-        if self.smsTextMode:
+        if self._smsTextMode:
             cmgrMatch = self.CMGR_SM_DELIVER_REGEX_TEXT.match(msgData[0])
             if cmgrMatch:
                 msgStatus, number, msgTime = cmgrMatch.groups()
@@ -1496,7 +1496,7 @@ class GsmModem(SerialComms):
             message = cusdMatches[0].group(2)
         return Ussd(self, sessionActive, message)
 
-    async def _placeHolderCallback(self, *args):
+    async def _placeholderCallback(self, *args):
         """ Does nothing """
         self.log.debug('called with args: {0}'.format(args))
 
