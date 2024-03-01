@@ -13,6 +13,7 @@ Note: check PORT, BAUDRATE, and PIN variables to make this work
 import asyncio
 import logging
 
+# PORT = 'COM5' # ON WINDOWS, Port is from COM1 to COM9, you can check using the 'mode' command in cmd
 PORT = '/dev/ttyUSB1'
 BAUDRATE = 115200
 PIN = None # SIM card PIN (if any)

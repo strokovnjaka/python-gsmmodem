@@ -456,8 +456,8 @@ class GsmModem(SerialComms):
         :rtype: list
         """
 
-        self.log.debug('write: %s', data)
         responseLines = await super(GsmModem, self).write(data + writeTerm, waitForResponse=waitForResponse, timeout=timeout, expectedResponseTermSeq=expectedResponseTermSeq)
+        self.log.debug('wrote %s got %s', data, responseLines)
         if self._writeWait > 0: # Sleep a bit if required (some older modems suffer under load)
             await asyncio.sleep(self._writeWait)
         if waitForResponse:
@@ -538,7 +538,6 @@ class GsmModem(SerialComms):
 
     async def supportedCommands(self):
         """ :return: list of AT commands supported by this modem (without the AT prefix). Returns None if not known """
-        if self._commands: return copy.deepcopy(self._commands)
         try:
             # AT+CLAC responses differ between modems. Most respond with +CLAC: and then a comma-separated list of commands
             # while others simply return each command on a new line, with no +CLAC: prefix
@@ -724,24 +723,24 @@ class GsmModem(SerialComms):
             await self.write('AT+GSMBUSY="{0}"'.format(gsmBusy))
             self._gsmBusy = gsmBusy
 
-    async def smsc(self):
-        """ :return: The default SMSC number stored on the SIM card """
-        if self._smscNumber == None:
-            try:
-                readSmsc = await self.write('AT+CSCA?')
-            except SmscNumberUnknownError:
-                pass # Some modems return a CMS 330 error if the value isn't set
-            else:
-                cscaMatch = lineMatching('\+CSCA:\s*"([^,]+)",(\d+)$', readSmsc)
-                if cscaMatch:
-                    self._smscNumber = cscaMatch.group(1)
-        return self._smscNumber
-
-    async def smsc(self, smscNumber):
-        """ Set the default SMSC number to use when sending SMS messages """
+    async def smsc(self, smscNumber = None):
+        """ Get or set the default SMSC number to use when sending SMS messages """
+        """ :return: the default SMSC number stored on the SIM card """
+        if smscNumber is None:
+            if self._smscNumber is None:
+                try:
+                    readSmsc = await self.write('AT+CSCA?')
+                except SmscNumberUnknownError:
+                    pass # Some modems return a CMS 330 error if the value isn't set
+                else:
+                    cscaMatch = lineMatching('\+CSCA:\s*"([^,]+)",(\d+)$', readSmsc)
+                    if cscaMatch:
+                        self._smscNumber = cscaMatch.group(1)
+            return self._smscNumber
         if smscNumber != self._smscNumber:
             await self.write('AT+CSCA="{0}"'.format(smscNumber))
             self._smscNumber = smscNumber
+        return self._smscNumber
 
     async def ownNumber(self):
         """ Query subscriber phone number.
@@ -764,13 +763,13 @@ class GsmModem(SerialComms):
                 response = await self.write('AT+CPBS?')
                 selected_phonebook = response[0][6:].split('"')[1] # first line, remove the +CSCS: prefix, split, first parameter
 
-                if selected_phonebook is not "ON":
+                if selected_phonebook != "ON":
                     await self.write('AT+CPBS="ON"')
 
                 response = await self.write("AT+CPBR=1")
                 await self.write('AT+CPBS="{0}"'.format(selected_phonebook))
 
-            if response is "OK": # command is supported, but no number is set
+            if response == "OK": # command is supported, but no number is set
                 return None
             elif len(response) == 2: # OK and phone number. Actual number is in the first line, second parameter, and is placed inside quotation marks
                 cnumLine = response[0]
@@ -789,7 +788,7 @@ class GsmModem(SerialComms):
 
     async def setOwnNumber(self, phone_number):
         actual_phonebook = await self.write('AT+CPBS?')
-        if actual_phonebook is not "ON":
+        if actual_phonebook != "ON":
             await self.write('AT+CPBS="ON"')
         await self.write('AT+CPBW=1,"' + phone_number + '"')
 

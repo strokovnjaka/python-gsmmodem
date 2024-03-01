@@ -2,8 +2,6 @@
 
 """ Test suite for gsmmodem.serial_comms """
 
-from __future__ import print_function
-
 import time, unittest, logging
 from copy import copy
 

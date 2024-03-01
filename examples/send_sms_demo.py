@@ -13,8 +13,7 @@ import logging
 
 from gsmmodem.modem import GsmModem, SentSms
 
-# PORT = 'COM5' # ON WINDOWS, Port is from COM1 to COM9 ,
-# We can check using the 'mode' command in cmd
+# PORT = 'COM5' # ON WINDOWS, Port is from COM1 to COM9, you can check using the 'mode' command in cmd
 PORT = '/dev/ttyUSB1'
 BAUDRATE = 115200
 SMS_TEXT = 'A good teacher is like a candle, it consumes itself to light the way for others.'

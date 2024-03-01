@@ -2,8 +2,6 @@
 
 """ Test suite for gsmmodem.util """
 
-from __future__ import print_function
-
 import sys, time, unittest, logging, re
 from datetime import timedelta
 

@@ -8,7 +8,6 @@ Note: The "Console" object was copied from pySerial's miniterm.py code
 @author: Francois Aucamp <francois.aucamp@gmail.com>
 """
 
-from __future__ import print_function
 import os, sys, threading, time
 import serial
 

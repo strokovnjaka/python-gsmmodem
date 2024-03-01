@@ -38,7 +38,7 @@ Requirements
 ------------
 
 - Python 3.3 or later
-- `pyserial-asyncio <https://github.com/pyserial/pyserial-asyncio>`
+- `pyserial-asyncio-fast <https://github.com/home-assistant-libs/pyserial-asyncio-fast>`
 
 
 How to install this package
@@ -144,6 +144,7 @@ You can simply list all ttyUSB devices before and after pluging the modem in.
 
   ls /dev/ttyUSB*
 
+On Windows, port is from COM1 to COM9, you can check using the 'mode' command in cmd.
 
 Device or resource busy error
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

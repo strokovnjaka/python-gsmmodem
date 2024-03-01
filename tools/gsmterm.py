@@ -5,8 +5,6 @@ Launch script for GSMTerm
 
 @author: Francois Aucamp <francois.aucamp@gmail.com>
 """
-from __future__ import print_function
-
 import sys
 
 from gsmtermlib.terminal import GsmTerm, RawTerm
