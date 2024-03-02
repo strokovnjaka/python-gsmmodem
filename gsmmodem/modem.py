@@ -588,10 +588,11 @@ class GsmModem(SerialComms):
             self._compileSmsRegexes()
 
     async def smsSupportedEncoding(self):
-        """
-        :raise NotImplementedError: If an error occures during AT command response parsing.
-        :return: List of supported encoding names. """
+        """ Get supported SMS encoding names.
 
+        :raise NotImplementedError: If an error occures during AT command response parsing.
+        :return: List of supported encoding names. 
+        """
         # Check if command is available
         if not self._commands:
             self._smsSupportedEncodingNames = []
@@ -627,8 +628,20 @@ class GsmModem(SerialComms):
         self._smsSupportedEncodingNames = enc_list
         return self._smsSupportedEncodingNames
     
-    async def smsEncoding(self):
-        """ :return: Encoding name if encoding command is available, else GSM. """
+    async def smsEncoding(self, encoding=None):
+        """ Get or set ( inside PDU mode) encoding for SMS
+
+        Get encoding name if encoding command is availble, else GSM.
+        Set encoding for SMS inside PDU mode when encoding not None.
+        
+        :raise CommandError: if unable to set encoding
+        :raise ValueError: if encoding is not supported by modem
+        
+        :return: encoding name if encoding command is available, else GSM.
+        """
+        if encoding is not None:
+            return await self._set_smsEncoding(encoding)
+        
         if not self._commands:
             return self._smsEncoding
 
@@ -648,7 +661,7 @@ class GsmModem(SerialComms):
 
         return self._smsEncoding
 
-    async def smsEncoding(self, encoding):
+    async def _set_smsEncoding(self, encoding):
         """ Set encoding for SMS inside PDU mode.
 
         :raise CommandError: if unable to set encoding

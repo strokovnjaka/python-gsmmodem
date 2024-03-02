@@ -464,58 +464,59 @@ class TestGsmModemGeneralApi(IsolatedAsyncioTestCase):
             self.assertNotEqual(signalStrength, -1, '"Unknown" signal strength returned - should still have blocked')
             self.assertEqual(seq[-1], signalStrength, 'Incorrect signal strength returned')
         # Test InvalidStateException
-        tests = ('0,3', '0,0') # 0,3: network registration denied. 0,0: SIM not searching for network
+        # 0,3: network registration denied; 0,0: SIM not searching for network
+        tests = ('0,3', '0,0')
         for result in tests:
             def writeCallbackFunc(data):
                 if data == 'AT+CREG?\r':
                     set_response_sequence(['+CREG: {0}\r\n'.format(result), 'OK\r\n'])
             set_writeCallbackFunc(writeCallbackFunc)
-            self.assertRaises(InvalidStateException, await self.modem.waitForNetworkCoverage())
+            with self.assertRaises(InvalidStateException):
+                await self.modem.waitForNetworkCoverage()
         # Test TimeoutException
         def writeCallbackFunc2(data):
-            set_response_sequence(['+CREG: 0,1\r\n'.format(result), 'OK\r\n'])
+            set_response_sequence(['+CREG: 0,1\r\n', 'OK\r\n'])
         set_writeCallbackFunc(writeCallbackFunc2)
-        self.assertRaises(TimeoutException, await self.modem.waitForNetworkCoverage(), timeout=1)
+        with self.assertRaises(TimeoutException):
+            await self.modem.waitForNetworkCoverage(timeout=1)
         set_writeCallbackFunc()
 
-    # TODO: rewrite below
-
-    def test_errorTypes(self):
+    async def test_errorTypes(self):
         """ Tests error type detection- and handling by throwing random errors to commands """
         # Throw unnamed error
-        self.modem.serial.responseSequence = ['ERROR\r\n']
+        set_response_sequence(['ERROR\r\n'])
         try:
-            self.modem.write('AT')
+            await self.modem.write('AT')
         except CommandError as e:
             self.assertIsInstance(e, CommandError)
             self.assertEqual(e.command, 'AT')
             self.assertEqual(e.type, None)
             self.assertEqual(e.code, None)
         # Throw CME error
-        self.modem.serial.responseSequence = ['+CME ERROR: 22\r\n']
+        set_response_sequence(['+CME ERROR: 22\r\n'])
         try:
-            self.modem.write('AT+ZZZ')
+            await self.modem.write('AT+ZZZ')
         except CommandError as e:
             self.assertIsInstance(e, CmeError)
             self.assertEqual(e.command, 'AT+ZZZ')
             self.assertEqual(e.type, 'CME')
             self.assertEqual(e.code, 22)
         # Throw CMS error
-        self.modem.serial.responseSequence = ['+CMS ERROR: 310\r\n']
+        set_response_sequence(['+CMS ERROR: 310\r\n'])
         try:
-            self.modem.write('AT+XYZ')
+            await self.modem.write('AT+XYZ')
         except CommandError as e:
             self.assertIsInstance(e, CmsError)
             self.assertEqual(e.command, 'AT+XYZ')
             self.assertEqual(e.type, 'CMS')
             self.assertEqual(e.code, 310)
 
-    def test_smsEncoding(self):
+    async def test_smsEncoding(self):
         def writeCallbackFunc(data):
             if type(data) == bytes:
                 data = data.decode()
             self.assertEqual('AT+CSCS?\r', data, 'Invalid data written to modem; expected "{0}", got: "{1}"'.format('AT+CSCS?', data))
-        self.modem.serial.writeCallbackFunc = writeCallbackFunc
+        set_writeCallbackFunc(writeCallbackFunc)
         tests = [('UNKNOWN', '+CSCSERROR'),
                  ('UCS2', '+CSCS: "UCS2"'),
                  ('ISO', '+CSCS:"ISO"'),
@@ -524,15 +525,16 @@ class TestGsmModemGeneralApi(IsolatedAsyncioTestCase):
                  ('UNKNOWN', 'OK'),]
         for name, toWrite in tests:
             self.modem._smsEncoding = 'UNKNOWN'
-            self.modem.serial.responseSequence = ['{0}\r\n'.format(toWrite), 'OK\r\n']
-            self.assertEqual(name, self.modem.smsEncoding)
+            set_response_sequence(['{0}\r\n'.format(toWrite), 'OK\r\n'])
+            self.assertEqual(name, await self.modem.smsEncoding())
+        set_writeCallbackFunc()
 
-    def test_smsSupportedEncoding(self):
+    async def test_smsSupportedEncoding(self):
         def writeCallbackFunc(data):
             if type(data) == bytes:
                 data = data.decode()
             self.assertEqual('AT+CSCS=?\r', data, 'Invalid data written to modem; expected "{0}", got: "{1}"'.format('AT+CSCS?', data))
-        self.modem.serial.writeCallbackFunc = writeCallbackFunc
+        set_writeCallbackFunc(writeCallbackFunc)
         tests = [(['GSM'], '+CSCS: ("GSM")'),
                  (['GSM', 'UCS2'], '+CSCS: ("GSM", "UCS2")'),
                  (['GSM', 'UCS2'], '+CSCS:("GSM","UCS2")'),
@@ -540,9 +542,11 @@ class TestGsmModemGeneralApi(IsolatedAsyncioTestCase):
                  (['GSM'], '+CSCS: ("GSM" "UCS2")'),]
         for name, toWrite in tests:
             self.modem._smsSupportedEncodingNames = None
-            self.modem.serial.responseSequence = ['{0}\r\n'.format(toWrite), 'OK\r\n']
-            self.assertEqual(name, self.modem.smsSupportedEncoding)
-
+            set_response_sequence(['{0}\r\n'.format(toWrite), 'OK\r\n'])
+            self.assertEqual(name, await self.modem.smsSupportedEncoding())
+            # let the other threads run
+            await asyncio.sleep(0)
+        set_writeCallbackFunc()
 
 class TestUssd(IsolatedAsyncioTestCase):
     """ Tests USSD session handling """

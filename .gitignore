@@ -30,3 +30,6 @@ htmlcov
 *.swp
 
 .DS_Store
+.python-version
+.venv
+.vscode
