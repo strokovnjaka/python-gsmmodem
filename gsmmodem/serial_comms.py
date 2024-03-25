@@ -2,6 +2,7 @@
 
 """ Low-level serial communications handling """
 
+import copy
 import logging
 import re
 import asyncio
@@ -38,6 +39,7 @@ class SerialComms():
     # let's go! flag
     _started_lock = threading.Lock()
     _started = None
+    _ended = None
 
     # End-of-line read terminator
     RX_EOL_SEQ = b'\r\n'
@@ -90,7 +92,7 @@ class SerialComms():
             # nothing else waiting for this notification
             self._log.debug('Notification: %s', self._notification)
             if self._notificationCallback:
-                asyncio.run_coroutine_threadsafe(self._notificationCallback(self._notification), self._loop)
+                asyncio.run_coroutine_threadsafe(self._notificationCallback(copy.copy(self._notification)), self._modem_loop)
             self._notification = []
 
     def _init_started(self):
@@ -98,6 +100,7 @@ class SerialComms():
         with self._started_lock:
             if self._started is None:
                 self._started = asyncio.Event()
+                self._ended = threading.Event()
 
     async def _open(self):
         """ Opens serial communication with the device """
@@ -112,9 +115,9 @@ class SerialComms():
             # self._reading_task = self._reader.readuntil(self.RX_EOL_SEQ)
             try:
                 self._reading_task = asyncio.ensure_future(self._reader.readuntil(self.RX_EOL_SEQ))
-                self._log.debug(f"Reading task await")
+                # self._log.debug(f"Reading task await")
                 r = await self._reading_task
-                self._log.debug(f"Reading task result = {r}")
+                # self._log.debug(f"Reading task result = {r}")
                 self._read(r)
             except asyncio.CancelledError:
                 self._log.debug(f"Reading task CancelledError")
@@ -123,7 +126,7 @@ class SerialComms():
                 self._log.debug(f"Serial error: {e}")
                 self._log.debug(traceback.format_exc())
                 if self._fatalErrorCallback:
-                    self._loop.call_soon_threadsafe(self._fatalErrorCallback(e))
+                    asyncio.run_coroutine_threadsafe(self._fatalErrorCallback(e), self._modem_loop)
                 break
             self._reading_task = None
         self._log.debug(f"Finished [{self._port}]")
@@ -132,6 +135,9 @@ class SerialComms():
         """ Closes serial communication with the device """
         self._log.debug('Closing the device')
         asyncio.run_coroutine_threadsafe(self._close(), self._loop)
+        self._log.debug('Waiting for cleanup of the device')
+        self._ended.wait()
+        self._log.debug('Device cleaned up')
 
     async def _close(self):
         if self._reading_task:
@@ -141,7 +147,7 @@ class SerialComms():
             self._reading_task.cancel()
             # sleep for _reading_task to get cancelled
             while not self._reading_task.cancelled():
-                await asyncio.sleep(0.0001)
+                await asyncio.sleep(0)
             self._log.debug(f"Reading task {'is' if self._reading_task.cancelled() else 'not'} cancelled")
         else:
             self._log.debug(f"Nothing to close [{self._port}]")
@@ -149,13 +155,11 @@ class SerialComms():
             self._log.debug("Stopping the loop")
             self._loop.stop()
             self._log.debug("Loop stopped")
-        self._clear_serial()
-
-    def _clear_serial(self):
         self._reading_task = None
         self._reader = None
         self._writer = None
         self._loop = None
+        self._ended.set()
 
     async def write(self, data, waitForResponse=True, timeout=5, expectedResponseTermSeq=None):
         """ Writes data to serial device """
@@ -197,6 +201,7 @@ class SerialComms():
             loop.run_forever()
             self._log.debug('Thread SerialComms finished')
 
+        self._modem_loop = asyncio.get_event_loop()
         self._loop = asyncio.new_event_loop()
         threading.Thread(target=lambda: theloop(self._loop)).start()
         asyncio.run_coroutine_threadsafe(self._open(), self._loop)

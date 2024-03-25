@@ -952,12 +952,15 @@ class GsmModem(SerialComms):
                 self._ussdSessionEvent = None
                 return self._parseCusdResponse(cusdResponse)
         # Wait for the +CUSD notification message
-        future = self._ussdSessionEvent.wait()
         try:
-            future.result(responseTimeout)
+            self._log.debug(f"Waiting for ussd session event {self._ussdSessionEvent}")
+            await self._ussdSessionEvent.wait()
+            # await asyncio.wait_for(self._ussdSessionEvent.wait(), responseTimeout)
+            self._log.debug(f"Awaited ussd session event!")
             self._ussdSessionEvent = None
             return self._ussdResponse
         except TimeoutError:
+            self._log.debug(f"Timeout ussd session event {self._ussdSessionEvent}")
             self._ussdSessionEvent = None
             raise TimeoutException()
 
@@ -1471,9 +1474,13 @@ class GsmModem(SerialComms):
         """ Handler for USSD event notification line(s) """
         if self._ussdSessionEvent:
             # A sendUssd() call is waiting for this response - parse it
+            self._log.debug(f"Handling ussd {lines}")
             self._ussdResponse = self._parseCusdResponse(lines)
+            self._log.debug(f"Ussd response: {self._ussdResponse}")
             # Notify the issuing command
+            self._log.debug(f"Setting ussd session event... {self._ussdSessionEvent}")
             self._ussdSessionEvent.set()
+            self._log.debug(f"Ussd session event set! {self._ussdSessionEvent}")
 
     def _parseCusdResponse(self, lines):
         """ Parses one or more +CUSD notification lines (for USSD)
